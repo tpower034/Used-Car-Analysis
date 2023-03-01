@@ -1,0 +1,231 @@
+---
+title: "Used_Car_Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Describe research scenario and questions.
+
+Over the past few years used cars prices have been on the rise. I wanted to take a step back before COVID and the Chip shortage to see how car prices were traditionally correlated between selling price, year, and odometer reading. I also want to determine the equation that predicts car prices based on year and mileage.
+
+
+## Describe the data set
+
+The data set that I will be analyzing is from Kaggle (https://www.kaggle.com/tunguz/used-car-auction-prices), it is from 2015 and includes over 500,000 cars that were sold at auction. From this I will be removing all the columns and only keeping the year, selling price, and odometer reading. I will then remove any cars that did not have a year, price, or odometer reading in the data set. I also removed any data that was outside of the 1.5*IQR from the data set. From here I then randomly sampled 1,000 cars for my analysis.
+
+```{r cars}
+setwd("/Users/thomaspower/Desktop") 
+cars <- read.csv(
+   "car_prices.csv", 
+   header = TRUE)
+```
+
+```{r cars_1}
+cars <- subset(cars, select = -c(make, model, trim, body, transmission, vin, state, condition, color, interior, seller, mmr, saledate))
+cars <- cars[!(is.na(cars$year)), ] #Here I am removing any NA data
+cars <- cars[!(is.na(cars$odometer)), ]
+cars <- cars[!(is.na(cars$sellingprice)), ]
+cars$year <-  as.integer(cars$year) #Converting years to integer
+```
+
+Now we are left with the year, price, and odometer reading. 
+
+First let's remove the price outliers:
+
+```{r removing_price_outliers}
+fivenum(cars$sellingprice)
+iqr_price <- 18200-6900
+lower_fence_price <- 6900 - (iqr_price*1.5)
+cars <- cars[!(cars$sellingprice<lower_fence_price), ]
+upper_fence_price <- 18200 + (iqr_price*1.5)
+cars <- cars[!(cars$sellingprice>upper_fence_price), ]
+
+```
+
+
+Next let's remove the year outliers:
+
+```{r removing_year_outliers}
+fivenum(cars$year)
+iqr_year <- 2013-2007
+lower_fence_year <- 2007 - (iqr_year*1.5)
+cars <- cars[!(cars$year<lower_fence_year), ]
+upper_fence_year <- 2013 + (iqr_year*1.5)
+cars <- cars[!(cars$year>upper_fence_year), ]
+```
+
+Lastly let's remove the mileage outliers:
+
+```{r removing_mileage_outliers}
+fivenum(cars$odometer)
+iqr_odometer <- 183428-122970
+lower_fence_odometer <- 122970 - (iqr_odometer*1.5)
+cars <- cars[!(cars$odometer<lower_fence_odometer), ]
+upper_fence_odometer <- 183428 + (iqr_odometer*1.5)
+cars <- cars[!(cars$odometer>upper_fence_odometer), ]
+
+cars = cars[seq(1, nrow(cars), 382), ] #Here we are taking 1,000 samples of the data.
+
+```
+
+
+## Statistical Methods##
+
+I plan on using the correlation tests, graphs, and multiple linear regression in my analysis. 
+
+## Report Results##
+
+First I will take a look at the Sales Price and Year.
+
+```{r plot_year}
+plot(jitter(cars$year), cars$sellingprice, xlab = "Car Year", ylab = "Price in Dollars", main = "Selling Price and Year of Car", cex =.7)
+```
+
+As we can see from the graph the form is linear, direction is positively associated, and the strength of association appears to be moderate.
+
+**Now we will calculate the correlation coefficient**
+
+```{r year_cor}
+cor(cars$year, cars$sellingprice)
+```
+
+As we can see the correlation coefficient is .6148885. From this we can tell that the direction is positively associated, and the correlation is moderate. 
+
+**Now we will look at the odometer reading and price**
+
+```{r plot_odometer}
+plot(jitter(cars$year), cars$odometer, xlab = "Odometer Reading (Miles)", ylab = "Price in Dollars", main = "Selling Price and Odometer Reading", cex =.7)
+```
+
+As we can see from the graph the form is linear, direction is negatively associated, and the strength of association appears to be moderate.
+
+**Now we will calculate the correlation coefficient**
+
+```{r odometer_cor}
+cor(cars$odometer, cars$sellingprice)
+```
+
+As we can see the correlation coefficient is -.5976512. From this we can tell that the direction is negatively associated, and the correlation is moderate. 
+
+**I am now going to take a look at the least squares regression equation that predicts price from odometer reading and year.**
+
+```{r lm}
+cars_lm <- lm(formula = cars$sellingprice~cars$year+cars$odometer)
+summary(cars_lm)
+```
+
+**We will plug these values into our regression equation ŷ=β0+β1x1+β2x2 to get  ŷ=-1.494e+06+7.512e+02x1+-5.087e-02x2.**
+
+**Now we will test to see whether these predictors associated with the price at the alpha level.**
+
+First lets take a look at the graphs to check for any red flags.
+
+```{r graph}
+panel.cor <- function(x, y, digits=2, prefix="", cex.cor, ...) {
+usr <- par("usr")
+on.exit(par(usr))
+par(usr = c(0, 1, 0, 1))
+r <- abs(cor(x, y, use="complete.obs"))
+txt <- format(c(r, 0.123456789), digits=digits)[1]
+txt <- paste(prefix, txt, sep="")
+if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+text(0.5, 0.5, txt, cex = cex.cor * (1 + r) / 2)
+}
+
+panel.hist <- function(x, ...) {
+usr <- par("usr")
+on.exit(par(usr))
+par(usr = c(usr[1:2], 0, 1.5) )
+h <- hist(x, plot = FALSE)
+breaks <- h$breaks
+nB <- length(breaks)
+y <- h$counts
+y <- y/max(y)
+rect(breaks[-nB], 0, breaks[-1], y, col="white", ...)
+}
+
+panel.lm <- function (x, y, col = par("col"), bg = NA, pch = par("pch"),
+cex = 1, col.smooth = "black", ...) {
+points(x, y, pch = pch, col = col, bg = bg, cex = cex)
+abline(stats::lm(y ~ x), col = col.smooth, ...)
+}
+#now run the pairs function
+pairs(cars,upper.panel=panel.cor, diag.panel=panel.hist, lower.panel=panel.lm)
+
+```
+
+There does not appear to be any concerns so we will carry on. 
+
+**1.	Set up the hypotheses and select the alpha level**
+
+H0 β(year) = β(odometer) = 0 (Year and odometer are not predictors of price)
+
+H1 β(year) =!0 and/or β(odometer) =! 0 (At least one of the slope coefficients is different than 0; Year and/or odometer are significant predictors of price)
+
+alpha = .05
+
+**2.	Select the appropriate test statistic**
+
+F = MS Reg/MS Res df = 3, n - k - 1
+
+
+**3.	State the decision rule**
+
+Reject H0 if p <= alpha otherwise do not reject H0
+
+**4.	Compute the test statistic and the associated p-value**
+
+```{r test}
+cars_lm <- lm(formula = cars$sellingprice~cars$year+cars$odometer)
+summary(cars_lm)
+```
+
+This will give us an F-Statistic: 368.7 on 2 and 997 DF, p-value: 2.2e-16
+
+5.    Conclusion
+
+We will reject H0 since p<= alpha. We have significant evidence at the alpha = .05 level that odometer reading and year when taken together are predictive of selling price. That is, there is evidence of a linear association between selling price and year and odometer reading.
+
+**Next since the overall model was significant, we will take a look at each variable separately**
+
+We would again reject H0 for year since the p value is less than alpha. We have significant evidence at the alpha = .05 level that β(year) != 0 after controlling for odometer. That is, year is a predictive of sale price after adjusting for odometer. We are 95% confident that the true value of year is between 615 and 887 after controlling for odometer. That is, for every additional year of the vehicle we are 95% confident that the sales price is generally between 615 and 887 higher.
+
+We would again reject H0 for odometer since the p value is less than alpha. We have significant evidence at the alpha = .05 level that β(odometer) != 0 after controlling for year That is, odometer is a predictive of sale price after adjusting for year. We are 95% confident that the true value of odometer is between -6.192037e-02 and -3.982771e-02 after controlling for year. That is, for every additional mile of the vehicle we are 95% confident that the sales price is generally between -6.192037e-02 and -3.982771e-02 lower.
+
+```{r confint}
+confint(cars_lm, level =.95)
+
+```
+
+## Next we will check the residual plots ##
+
+```{r residual}
+plot(fitted(cars_lm),resid(cars_lm), axes=TRUE, frame.plot=TRUE, xlab = "fitted values", ylab="residuals")
+abline(h=0) 
+```
+
+```{r years_res}
+plot(jitter(cars$year),resid(cars_lm), axes=TRUE, frame.plot=TRUE, xlab = "Car Year", ylab="residuals")
+abline(h=0)
+
+```
+
+```{r odometer_res}
+plot(jitter(cars$odometer),resid(cars_lm), axes=TRUE, frame.plot=TRUE, xlab = "Odometer Reading (Miles)", ylab="residuals")
+abline(h=0)
+
+```
+```{r hist}
+hist(resid(cars_lm))
+
+```
+
+The fit appears to be reasonable. The Histogram seems a little bit skewed but nothing of overly concern.
+
+## State your conclusions##
+
+In conclusion year and odometer reading are a predictor of selling price of a used car. One concern is in regards to lurking variables. The original data set had many additional columns such as vehicle type, engine size, etc. which could have a big impact on our model. I really just wanted to focus on the year and odometer of the vehicle, but an additional analysis could be performed looking at all the variables present. In conclusion we did an in depth look and are confident in our results. The year and odometer readings are a predictor of the selling price. 
